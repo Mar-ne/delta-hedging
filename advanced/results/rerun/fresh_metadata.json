@@ -1,0 +1,34 @@
+{
+  "model": {
+    "P": 100.0,
+    "K": 100.0,
+    "T": 1.0,
+    "r": 0.05,
+    "drift": 0.1,
+    "sigma_hedge": 0.2,
+    "steps_per_day": 10,
+    "paths": 1000
+  },
+  "intervals_days": [
+    0.1,
+    0.5,
+    1,
+    2,
+    3,
+    5,
+    10,
+    15,
+    30,
+    60
+  ],
+  "A_seeds": [
+    42,
+    43
+  ],
+  "B_selection_seed": 43,
+  "B_validation_seed": 44,
+  "selection_loss_limit": 0.01,
+  "selected_interval_fresh": 3,
+  "validation_interval_fixed_from_history": 3,
+  "numpy_version": "2.5.3"
+}
