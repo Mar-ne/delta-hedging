@@ -1,53 +1,71 @@
-# Discrete Delta Hedging Simulation
+# Delta Hedging: Replication, Optimal Rebalancing & Volatility Trading
 
-使用 Python 模拟欧式看涨期权的自融资复制组合，比较调仓频率和股票真实漂移率对复制误差的影响。
+一个 Python 数学金融学习项目：从 GBM 股价路径和自融资复制组合出发，研究离散对冲误差、交易成本和波动率差异。
 
-## 实验设置
+## 从哪里开始
 
-- 股票服从 GBM，初始股价与行权价均为 100，期限 1 年。
-- 年化波动率 20%，无风险利率 5%，真实漂移率分别为 +10% 和 −10%。
-- 一年分为 365 个模拟时间间隔，每种 drift 生成 1000 条路径。
-- 每隔 1、7、30 天调仓，种子固定为 42；两种 drift 配对使用相同随机冲击。
-- 无股息、无交易成本，允许碎股交易，借款与存款利率相同；未使用真实交易日历。
+| 内容 | Notebook | 说明 |
+|---|---|---|
+| 基础实验 | [Delta_Hedging.ipynb](Delta_Hedging.ipynb) | 无交易成本；比较调仓频率与真实 drift |
+| A/B 扩展 | [advanced/Hedging_AB.ipynb](advanced/Hedging_AB.ipynb) | 含交易成本的频率选择、波动率交易和独立验证 |
 
-## 结果
+最新完整结果见 [A/B 实验报告](advanced/实验报告.md)，从零生成数据的代码见 [experiments_ab.py](advanced/experiments_ab.py)。
 
-到期复制误差定义为 **组合价值 − 期权到期收益**。平均误差衡量偏向盈余还是不足；RMSE 避免正负抵消，越小表示总体复制越准确。
+## A：交易成本下，多久调仓一次？
 
-| Drift | 调仓间隔 | 平均误差 | RMSE |
+初始股价和行权价均为 100，期限 1 年，无风险利率 5%，真实 drift 10%。实际与定价波动率均为 20%，每笔股票交易收费 0.1%，包含初始建仓、后续调仓和到期平仓。一年划分为 3650 步，每批 1000 条路径。
+
+在 0.1、0.5、1、2、3、5、10、15、30、60 天的候选间隔中，以含成本复制误差 RMSE 最小为目标，两批路径均选出 **每 2 天调仓**：
+
+| 随机种子 | 1 天 RMSE | 2 天 RMSE | 3 天 RMSE |
 |---|---:|---:|---:|
-| +10% | 1 天 | −0.0130 | 0.3533 |
-| +10% | 7 天 | +0.0026 | 0.8922 |
-| +10% | 30 天 | +0.0699 | 1.8667 |
-| −10% | 1 天 | −0.0132 | 0.3625 |
-| −10% | 7 天 | −0.0485 | 0.9375 |
-| −10% | 30 天 | −0.0504 | 1.7658 |
+| 42 | 0.8532 | **0.7620** | 0.8040 |
+| 43 | 0.8527 | **0.7825** | 0.7938 |
 
-![RMSE 对比](results/rmse_comparison.png)
+![A：RMSE、交易成本和损益波动](advanced/results/rerun/A_optimal_hedging.png)
 
-![复制误差分布](results/error_distributions.png)
+## B：对冲后的损益来自哪里？
 
-本次实验中，两种 drift 下更频繁的调仓均得到更低的 RMSE。真实 drift 不影响 Black–Scholes 初始价格和 Delta，但可以改变离散对冲误差的分布。初始期权价格约为 10.4506，Delta 约为 0.6368。
+固定定价波动率为 20%，先关闭交易成本。每 0.1 天调仓时：
 
-![共享随机冲击的示例股价路径](results/example_paths.png)
+| 实际波动率 | 平均对冲损益 |
+|---|---:|
+| 15% | +1.8251 |
+| 20% | −0.0058 |
+| 25% | −1.9162 |
 
-## 阅读与运行
+实际波动率低于定价波动率时，卖出期权并对冲产生正的平均毛损益；较高时转为负值。结果与 Gamma 加权的方差差有关，完整解释见报告。
 
-- [Delta_Hedging.ipynb](Delta_Hedging.ipynb)：完整中文说明、代码、已保存的运行输出和图表。
-- [实验报告.md](实验报告.md)：模型、方法、结论与局限。
-- [delta_hedging_clean.py](delta_hedging_clean.py)：对应的脚本版本。
-- [results/summary.csv](results/summary.csv)：六组统计结果。
-- [results/path_errors.csv](results/path_errors.csv)：每条路径的复制误差。
+加入 0.1% 股票交易成本后，在实际波动率 15%、定价波动率 20% 的情景中，用“样本亏损比例不超过 1%，同时平均净损益最高”的规则选出 **3 天**。固定该策略，以独立种子 44 验证：
+
+| 样本 | 平均净损益 | 标准差 | 亏损比例 | 第 5 百分位 |
+|---|---:|---:|---:|---:|
+| 筛选：种子 43 | 1.3960 | 0.7758 | 0.3% | 0.3115 |
+| 验证：种子 44 | **1.4224** | 0.7532 | **0.2%** | 0.3172 |
+
+![B：交易频率、净收益和亏损概率](advanced/results/rerun/B_volatility_trading.png)
+
+A 与 B 的参数和评价目标不同，选出的频率不能直接互换。
+
+## 数据与复现
+
+最新扩展的数据全部由独立程序从随机股价路径计算，未读取先前手动记录的结果表。
+
+- [61 组完整统计](advanced/results/rerun/fresh_summary.csv)
+- [61,000 条逐路径损益记录](advanced/results/rerun/fresh_path_pnl.csv)：同一路径会在不同调仓频率下重复评估，这不是 61,000 条独立股价路径。
+- [运行参数、种子和 NumPy 版本](advanced/results/rerun/fresh_metadata.json)
+- [逐路径数据核对与文件哈希](advanced/results/audit.json)：已从逐路径记录独立重算六项汇总指标，并核对净损益、毛损益和成本之间的关系。
 
 ```bash
+cd advanced
 python -m pip install -r requirements.txt
-python delta_hedging_clean.py
+python experiments_ab.py
 ```
 
-脚本依赖 NumPy 和 Matplotlib，结果保存到脚本旁的 `results/`。脚本依次显示三幅图，关闭当前图窗后继续；重新运行会更新同名结果文件。
+程序自动运行全部实验，生成数据和 PNG 图，结果写入 `advanced/results/rerun/`。也可以在 VS Code 或 Jupyter 中运行 A/B Notebook 下方的重跑单元。
 
-也可以在 VS Code 或 Jupyter 中打开 Notebook，选择已安装上述依赖的 Python 内核，从上到下运行所有单元。Notebook 的结果目录相对于内核工作目录。Notebook 与脚本是两种运行入口，选择一种即可。
+基础版本仍可通过 `python delta_hedging_clean.py` 运行。
 
 ## 局限
 
-路径生成与定价采用同一个常波动率 GBM 模型，未考虑交易成本、跳跃、随机波动率或融资约束。1000 条路径存在抽样误差，未计算置信区间；两种 drift 之间的小差异不能据此解释为稳定规律。这是模型内的复制实验，未验证真实市场的对冲效果。
+常波动率 GBM、无股息、碎股交易和理想融资均为模型假设，未使用真实市场数据。未来实际波动率在市场中未知。本次选择只针对指定参数、候选网格和有限样本；样本亏损比例低于 1% 不代表真实亏损概率必然低于 1%，也不构成真实市场盈利验证。
