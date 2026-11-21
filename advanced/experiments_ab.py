@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-"""A/B 实验的一键重跑入口。历史记录位于 results/reported_results.csv。
+"""Run all A/B experiments from simulated stock price paths.
 
-本脚本采用与代码相同的 GBM、Delta 与收费规则；沿路径时间顺序
-更新股价，但并行处理 1000 条路径，并把两次调仓之间的现金利息合并计提。
+This module uses the same GBM, Delta and transaction-cost rules as the
+learning implementation. It updates prices in time order, processes 1,000
+paths in parallel and compounds cash over each interval between trades.
 """
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,14 +43,14 @@ def initial_price_delta(model):
 
 def generate_paths(model, sigma_actual, seed):
     if sigma_actual <= 0 or model.sigma_hedge <= 0:
-        raise ValueError('波动率必须为正。')
+        raise ValueError('Volatilities must be positive.')
     exact_steps = 365 * model.T * model.steps_per_day
     steps = round(exact_steps)
     if not np.isclose(exact_steps, steps) or steps < 1:
-        raise ValueError('期限必须与模拟时间网格一致。')
+        raise ValueError('The maturity must align with the simulation time grid.')
     dt = model.T / steps
     rng = np.random.default_rng(seed)
-    # 行对应路径，列对应时点，保持原教学代码的随机数消费顺序。
+    # Rows are paths and columns are time points; preserve the learning implementation's random-number order.
     shocks = rng.standard_normal((model.paths, steps))
     prices = np.empty((model.paths, steps + 1))
     prices[:, 0] = model.P
@@ -62,13 +63,13 @@ def generate_paths(model, sigma_actual, seed):
 
 
 def hedge_paths(prices, interval_days, fee_rate, model):
-    """返回净损益、毛损益和手续费折算到期值。每份期权对应一股。"""
+    """Return net P&L, gross P&L and trading costs accumulated to maturity. One option is on one share."""
     interval_steps_float = interval_days * model.steps_per_day
     interval_steps = round(interval_steps_float)
     if interval_steps < 1 or not np.isclose(interval_steps, interval_steps_float):
-        raise ValueError('调仓间隔必须是基础步长 0.1 天的整数倍。')
+        raise ValueError('The rebalancing interval must be a positive integer multiple of the 0.1-day base step.')
     if fee_rate < 0:
-        raise ValueError('手续费率不能为负。')
+        raise ValueError('The transaction-cost rate cannot be negative.')
     steps = prices.shape[1] - 1
     dt = model.T / steps
     initial_price, initial_delta = initial_price_delta(model)
@@ -129,13 +130,13 @@ def run_all(output_dir, model=None):
         bundle = {}
         for interval in intervals:
             net, gross, cost = hedge_paths(prices, interval, fee, model)
-            # 数学恒等式：费用不会改变 Delta，净损益 + 费用到期值 = 毛损益。
+            # Accounting identity: costs do not change Delta; net P&L + accumulated costs = gross P&L.
             if fee:
                 independent_gross, _, _ = hedge_paths(prices, interval, 0.0, model)
                 if not np.allclose(net + cost, independent_gross, atol=1e-8, rtol=1e-9):
-                    raise AssertionError('自融资/成本核对未通过。')
+                    raise AssertionError('The self-financing and transaction-cost check failed.')
             elif not np.all(cost == 0):
-                raise AssertionError('零费率下成本不为零。')
+                raise AssertionError('Trading costs must be zero when the fee rate is zero.')
             row = {
                 'experiment': case, 'seed': seed, 'paths': model.paths,
                 'steps_per_day': model.steps_per_day, 'interval_days': interval,
@@ -154,14 +155,14 @@ def run_all(output_dir, model=None):
                   f'RMSE={row["rmse"]:.4f}, loss={row["loss_probability"]:.1%}', flush=True)
         bundles[(case, seed)] = bundle
 
-    # A：两批路径中分别比较相同参数下的复制 RMSE。
+    # A: compare replication RMSE under identical parameters in two independent batches.
     for seed in [42, 43]:
         prices = generate_paths(model, 0.20, seed)
         collect('A', seed, 0.20, 0.001, INTERVALS, prices)
         if seed == 43:
             collect('B_equal_vol_no_cost', seed, 0.20, 0.0, INTERVALS, prices)
 
-    # B：每种波动率重新使用 seed=43，配对使用同一组随机冲击。
+    # B: reset seed 43 for each volatility to use paired random shocks.
     prices = generate_paths(model, 0.15, 43)
     collect('B_low_vol_no_cost', 43, 0.15, 0.0, INTERVALS, prices)
     collect('B_low_vol_with_cost', 43, 0.15, 0.001, INTERVALS, prices)
@@ -173,7 +174,7 @@ def run_all(output_dir, model=None):
                   and row['loss_probability'] <= 0.01]
     selected = max(candidates, key=lambda row: row['mean']) if candidates else None
 
-    # 历史实验事先选定 3 天；独立验证固定评估该策略，不用新样本重新挑频率。
+    # The original selection fixed a 3-day policy; evaluate it on an independent sample without reselection.
     prices = generate_paths(model, 0.15, 44)
     collect('B_validation_fixed_3_days', 44, 0.15, 0.001, [3], prices)
 
