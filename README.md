@@ -1,60 +1,60 @@
-# Delta Hedging: Replication, Optimal Rebalancing & Volatility Trading
+# Delta Hedging: Replication, Optimal Rebalancing and Volatility Trading
 
-一个 Python 数学金融学习项目：从 GBM 股价路径和自融资复制组合出发，研究离散对冲误差、交易成本和波动率差异。
+A Python mathematical finance project examining discrete replication errors, trading costs and volatility differences using simulated GBM paths and self-financing stock-and-cash portfolios.
 
-## 从哪里开始
+## Start here
 
-| 内容 | Notebook | 说明 |
+| Part | Notebook | Scope |
 |---|---|---|
-| 基础实验 | [Delta_Hedging.ipynb](Delta_Hedging.ipynb) | 无交易成本；比较调仓频率与真实 drift |
-| A/B 扩展 | [advanced/Hedging_AB.ipynb](advanced/Hedging_AB.ipynb) | 含交易成本的频率选择、波动率交易和独立验证 |
+| Baseline | [Delta_Hedging.ipynb](Delta_Hedging.ipynb) | Cost-free replication, rebalancing frequency and physical drift |
+| A/B extension | [advanced/Hedging_AB.ipynb](advanced/Hedging_AB.ipynb) | Cost-aware rebalancing, volatility trading and independent validation |
 
-最新完整结果见 [A/B 实验报告](advanced/实验报告.md)，从零生成数据的代码见 [experiments_ab.py](advanced/experiments_ab.py)。
+Read the [baseline report](Report.md), the [A/B report](advanced/Report.md), or the [project summary and next steps](advanced/Project_Summary_and_Next_Steps.md). The standalone A/B implementation is [experiments_ab.py](advanced/experiments_ab.py).
 
-## A：交易成本下，多久调仓一次？
+## A: How often should the hedge be rebalanced?
 
-初始股价和行权价均为 100，期限 1 年，无风险利率 5%，真实 drift 10%。实际与定价波动率均为 20%，每笔股票交易收费 0.1%，包含初始建仓、后续调仓和到期平仓。一年划分为 3650 步，每批 1000 条路径。
+The initial stock price and strike are 100, maturity is one year, the risk-free rate is 5%, and physical drift is 10%. Actual and pricing volatility are both 20%. Stock trades incur a 0.1% proportional cost, including initial positioning, rebalancing and terminal liquidation. Each batch contains 1,000 paths on a 3,650-step grid.
 
-在 0.1、0.5、1、2、3、5、10、15、30、60 天的候选间隔中，以含成本复制误差 RMSE 最小为目标，两批路径均选出 **每 2 天调仓**：
+Candidate intervals are 0.1, 0.5, 1, 2, 3, 5, 10, 15, 30 and 60 days. Minimizing net replication RMSE selects **2 days** in both batches:
 
-| 随机种子 | 1 天 RMSE | 2 天 RMSE | 3 天 RMSE |
+| Seed | 1-day RMSE | 2-day RMSE | 3-day RMSE |
 |---|---:|---:|---:|
 | 42 | 0.8532 | **0.7620** | 0.8040 |
 | 43 | 0.8527 | **0.7825** | 0.7938 |
 
-![A：RMSE、交易成本和损益波动](advanced/results/rerun/A_optimal_hedging.png)
+![A: replication RMSE, costs and P&L variability](advanced/results/rerun/A_optimal_hedging.png)
 
-## B：对冲后的损益来自哪里？
+## B: Where does hedged P&L come from?
 
-固定定价波动率为 20%，先关闭交易成本。每 0.1 天调仓时：
+Hold pricing volatility at 20%, remove transaction costs, and rebalance every 0.1 day:
 
-| 实际波动率 | 平均对冲损益 |
+| Actual volatility | Mean terminal hedged P&L |
 |---|---:|
 | 15% | +1.8251 |
-| 20% | −0.0058 |
-| 25% | −1.9162 |
+| 20% | -0.0058 |
+| 25% | -1.9162 |
 
-实际波动率低于定价波动率时，卖出期权并对冲产生正的平均毛损益；较高时转为负值。结果与 Gamma 加权的方差差有关，完整解释见报告。
+Selling the call and hedging it generates positive average gross P&L when actual volatility is lower than pricing volatility, and negative average P&L when actual volatility is higher. The report relates this to the Gamma-weighted variance difference.
 
-加入 0.1% 股票交易成本后，在实际波动率 15%、定价波动率 20% 的情景中，用“样本亏损比例不超过 1%，同时平均净损益最高”的规则选出 **3 天**。固定该策略，以独立种子 44 验证：
+With actual volatility 15%, pricing volatility 20% and a 0.1% fee, maximizing mean net P&L subject to a sample loss rate of at most 1% selects **3 days**. The policy is then fixed and evaluated on independent seed 44:
 
-| 样本 | 平均净损益 | 标准差 | 亏损比例 | 第 5 百分位 |
+| Sample | Mean net P&L | SD | Sample loss rate | 5th percentile |
 |---|---:|---:|---:|---:|
-| 筛选：种子 43 | 1.3960 | 0.7758 | 0.3% | 0.3115 |
-| 验证：种子 44 | **1.4224** | 0.7532 | **0.2%** | 0.3172 |
+| Selection: seed 43 | 1.3960 | 0.7758 | 0.3% | 0.3115 |
+| Validation: seed 44 | **1.4224** | 0.7532 | **0.2%** | 0.3172 |
 
-![B：交易频率、净收益和亏损概率](advanced/results/rerun/B_volatility_trading.png)
+![B: rebalancing frequency, net P&L and loss rates](advanced/results/rerun/B_volatility_trading.png)
 
-A 与 B 的参数和评价目标不同，选出的频率不能直接互换。
+A and B use different parameters and objectives. Their selected intervals are not interchangeable. All P&L amounts are per option on one share, not returns on equity.
 
-## 数据与复现
+## Data and reproducibility
 
-最新扩展的数据全部由独立程序从随机股价路径计算。
+The extension generates its data from simulated stock price paths.
 
-- [61 组完整统计](advanced/results/rerun/fresh_summary.csv)
-- [61,000 条逐路径损益记录](advanced/results/rerun/fresh_path_pnl.csv)：同一路径会在不同调仓频率下重复评估，这不是 61,000 条独立股价路径。
-- [运行参数、种子和 NumPy 版本](advanced/results/rerun/fresh_metadata.json)
-- [逐路径数据核对与文件哈希](advanced/results/audit.json)：已从逐路径记录独立重算六项汇总指标，并核对净损益、毛损益和成本之间的关系。
+- [61 full-precision summaries](advanced/results/rerun/fresh_summary.csv).
+- [61,000 pathwise P&L records](advanced/results/rerun/fresh_path_pnl.csv). Strategies reuse price paths; this is not a count of independent stock paths.
+- [Parameters, seeds and NumPy version](advanced/results/rerun/fresh_metadata.json).
+- [Independent numerical checks and hashes](advanced/results/audit.json).
 
 ```bash
 cd advanced
@@ -62,10 +62,8 @@ python -m pip install -r requirements.txt
 python experiments_ab.py
 ```
 
-程序自动运行全部实验，生成数据和 PNG 图，结果写入 `advanced/results/rerun/`。也可以在 VS Code 或 Jupyter 中运行 A/B Notebook 下方的重跑单元。
+The script runs all A/B experiments and writes CSV and PNG files to `advanced/results/rerun/`. Alternatively, run the optional code cells in the A/B notebook. The baseline can be run with `python delta_hedging_clean.py`; its output goes to the root `results/` directory. `delta_hedging.py` is the original learning implementation.
 
-基础版本仍可通过 `python delta_hedging_clean.py` 运行。
+## Limitations
 
-## 局限
-
-常波动率 GBM、无股息、碎股交易和理想融资均为模型假设，未使用真实市场数据。未来实际波动率在市场中未知。本次选择只针对指定参数、候选网格和有限样本；样本亏损比例低于 1% 不代表真实亏损概率必然低于 1%，也不构成真实市场盈利验证。
+Constant-volatility GBM, no dividends, fractional shares and idealized financing are model assumptions. No real market quotes are used, and future actual volatility is unknown in practice. The selected intervals apply to the stated parameters, candidate grid and finite samples. A sample loss rate below 1% does not guarantee a population loss probability below 1% or profitable real-market trading.

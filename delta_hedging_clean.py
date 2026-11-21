@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-# 整理版：运行后在脚本所在文件夹的 results 中保存结果。
-# 修改参数后请重新运行整个脚本。
+# Save the generated results in the results directory next to this script.
+# Rerun the entire script after changing any parameters.
 
-# %% 参数
+# %% Parameters
 import csv
 from pathlib import Path
 from statistics import NormalDist
@@ -10,12 +10,12 @@ from statistics import NormalDist
 import numpy as np
 import matplotlib.pyplot as plt
 
-P = 100             # 初始股价
-K = 100             # 行权价
-sigma = 0.20        # 年化波动率
-T = 1               # 一年到期
-step = 365          # 一年分为 365 个时间间隔
-r = 0.05            # 年化无风险利率
+P = 100             # Initial stock price
+K = 100             # Strike price
+sigma = 0.20        # Annualized volatility
+T = 1               # One-year maturity
+step = 365          # 365 simulation intervals per year
+r = 0.05            # Annualized risk-free rate
 path_count = 1000
 seed = 42
 intervals = [1, 7, 30]
@@ -27,7 +27,7 @@ normal = NormalDist()
 result_dir = Path(__file__).resolve().parent / "results"
 result_dir.mkdir(exist_ok=True)
 
-# %% 初始定价
+# %% Initial pricing
 d1 = (np.log(P / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
 d2 = d1 - sigma * np.sqrt(T)
 call_price = P * normal.cdf(d1) - K * np.exp(-r * T) * normal.cdf(d2)
@@ -39,9 +39,9 @@ print(f"Initial delta:        {delta:.10f}")
 print(f"Initial cash:         {initial_cash:.10f}")
 
 
-# %% 函数
+# %% Functions
 def generate_path(rng, drift):
-    """按 GBM 的精确更新公式生成一条路径，包含初始价格。"""
+    """Generate one GBM path using the exact grid update, including the initial price."""
     prices = [P]
     for i in range(step):
         Z = rng.standard_normal()
@@ -54,12 +54,12 @@ def generate_path(rng, drift):
 
 
 def hedge_error(prices, rebalance_every):
-    """沿用上面的模型参数，返回自融资组合的到期复制误差。"""
+    """Return the terminal self-financing replication error using the model parameters above."""
     shares = delta
     cash = call_price - shares * P
 
     for i in range(1, step):
-        cash *= np.exp(r * dt)  # 不论是否调仓，现金每天计息
+        cash *= np.exp(r * dt)  # Accrue cash interest every day, whether or not a trade occurs
         if i % rebalance_every != 0:
             continue
 
@@ -74,20 +74,20 @@ def hedge_error(prices, rebalance_every):
         cash -= (new_delta - shares) * current_price
         shares = new_delta
 
-    # 最后一个间隔只计息，到期不再计算 Delta
+    # Accrue interest over the final interval; do not evaluate Delta at expiry
     cash *= np.exp(r * dt)
     final_value = shares * prices[-1] + cash
     payoff = max(prices[-1] - K, 0)
     return final_value - payoff
 
 
-# %% 两组实验与统计
+# %% Two drift scenarios and summary statistics
 all_errors = {}
 example_paths = {}
 
 for drift in drifts:
-    # 每种 drift 重新使用同一种子，使两组实验配对使用相同随机冲击。
-    # 同一组实验内，生成器必须放在路径循环外。
+    # Reset the seed for each drift so both scenarios use paired random shocks.
+    # Within a scenario, initialize the generator outside the path loop.
     rng = np.random.default_rng(seed)
     errors = {interval: [] for interval in intervals}
 
@@ -102,7 +102,7 @@ for drift in drifts:
         interval: np.array(values) for interval, values in errors.items()
     }
 
-# 全部模拟完成后再统计，避免在路径循环中反复计算。
+# Calculate summary statistics after all paths have been simulated.
 summary = []
 print("Drift   Interval   Mean error     RMSE")
 for drift in drifts:
@@ -117,7 +117,7 @@ for drift in drifts:
         print(f"{drift:+.0%}    {interval:>3}        {mean_error:>8.4f}   {rmse:>8.4f}")
 
 
-# %% 图表
+# %% Figures
 times = np.linspace(0, T, step + 1)
 fig, ax = plt.subplots(figsize=(9, 4.5))
 for drift in drifts:
@@ -169,7 +169,7 @@ fig.savefig(result_dir / "rmse_comparison.png", dpi=160)
 plt.show()
 
 
-# %% 导出
+# %% Export
 with (result_dir / "summary.csv").open("w", newline="", encoding="utf-8-sig") as f:
     writer = csv.DictWriter(f, fieldnames=list(summary[0]))
     writer.writeheader()
